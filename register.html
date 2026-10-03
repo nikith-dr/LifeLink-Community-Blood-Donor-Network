@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Register{% endblock %}
+{% block content %}<div class="row justify-content-center"><div class="col-lg-8">
+<div class="card"><div class="card-body"><h2>Create Account</h2>
+<form method="post" class="row g-3">
+<div class="col-md-6"><label>Name</label><input class="form-control" name="name" required></div>
+<div class="col-md-6"><label>Email</label><input class="form-control" type="email" name="email" required></div>
+<div class="col-md-6"><label>Password</label><input class="form-control" type="password" name="password" minlength="6" required></div>
+<div class="col-md-6"><label>Phone</label><input class="form-control" name="phone" required></div>
+<div class="col-md-6"><label>Role</label><select class="form-select" name="role" id="role" required>
+<option value="donor">Donor</option><option value="requester">Requester</option><option value="volunteer">Volunteer</option></select></div>
+<div class="col-md-6"><label>Blood Group (donor)</label><select class="form-select" name="blood_group">
+<option value="">Not applicable</option>{% for bg in blood_groups %}<option>{{ bg }}</option>{% endfor %}</select></div>
+<div class="col-md-12"><label>City</label><input class="form-control" name="city" required></div>
+<div class="col-12"><button class="btn btn-danger">Register</button></div>
+</form></div></div></div></div>{% endblock %}

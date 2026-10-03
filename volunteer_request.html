@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block title %}Volunteer Request{% endblock %}
+{% block content %}<div class="row justify-content-center"><div class="col-lg-8"><div class="card"><div class="card-body"><h2>Emergency Volunteer Request</h2>
+<form method="post" class="row g-3">
+<div class="col-md-8"><label>Assistance Needed</label><input class="form-control" name="assistance" placeholder="Transport, food, supplies, etc." required></div>
+<div class="col-md-4"><label>Urgency</label><select class="form-select" name="urgency"><option>Emergency</option><option>Urgent</option><option>Normal</option></select></div>
+<div class="col-md-8"><label>Location</label><input class="form-control" name="location" required></div>
+<div class="col-md-4"><label>Contact</label><input class="form-control" name="contact" required></div>
+<div class="col-12"><label>Notes</label><textarea class="form-control" name="notes"></textarea></div>
+<div class="col-12"><button class="btn btn-danger">Publish Volunteer Request</button></div>
+</form></div></div></div></div>{% endblock %}

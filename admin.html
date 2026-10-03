@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block title %}Admin Dashboard{% endblock %}
+{% block content %}<h2>Admin Dashboard</h2>
+<h4 class="mt-4">Users</h4><div class="table-responsive"><table class="table table-bordered table-sm"><tr><th>Name</th><th>Email</th><th>Role</th><th>Blood</th><th>City</th></tr>{% for u in users %}<tr><td>{{u.name}}</td><td>{{u.email}}</td><td>{{u.role}}</td><td>{{u.blood_group or '-'}}</td><td>{{u.city}}</td></tr>{% endfor %}</table></div>
+<h4 class="mt-4">Blood Requests</h4><div class="table-responsive"><table class="table table-bordered table-sm"><tr><th>ID</th><th>Requester</th><th>Need</th><th>Hospital</th><th>Status</th><th>Action</th></tr>{% for r in reqs %}<tr><td>{{r.id}}</td><td>{{r.requester_name}}</td><td>{{r.blood_group}} / {{r.units}}</td><td>{{r.hospital}}</td><td>{{r.status}}</td><td>
+<form method="post" action="{{url_for('update_request',request_id=r.id,status='Fulfilled')}}" class="d-inline"><button class="btn btn-sm btn-success">Fulfilled</button></form>
+<form method="post" action="{{url_for('update_request',request_id=r.id,status='Cancelled')}}" class="d-inline"><button class="btn btn-sm btn-outline-danger">Cancel</button></form>
+</td></tr>{% endfor %}</table></div>
+<h4 class="mt-4">Donor Responses</h4><div class="table-responsive"><table class="table table-bordered table-sm"><tr><th>Donor</th><th>Blood</th><th>Hospital</th><th>Response</th></tr>{% for r in responses %}<tr><td>{{r.donor_name}}</td><td>{{r.blood_group}}</td><td>{{r.hospital}}</td><td>{{r.response}}</td></tr>{% else %}<tr><td colspan="4">No responses yet.</td></tr>{% endfor %}</table></div>
+{% endblock %}

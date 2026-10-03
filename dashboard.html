@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3"><div><h2>Welcome, {{ user.name }}</h2><span class="badge bg-secondary">{{ user.role }}</span></div>
+<div>
+<a class="btn btn-danger" href="{{ url_for('blood_request') }}">Blood Request</a>
+<a class="btn btn-outline-danger" href="{{ url_for('volunteer_request') }}">Volunteer Request</a>
+</div></div>
+<div class="row g-4">
+<div class="col-lg-7"><div class="card"><div class="card-body"><h3>Active Blood Requests</h3>
+{% for r in requests %}<div class="border rounded p-3 mb-2">
+<div class="d-flex justify-content-between"><b>{{ r.blood_group }} — {{ r.units }} unit(s)</b><span class="badge bg-warning text-dark">{{ r.urgency }}</span></div>
+{{ r.hospital }}, {{ r.city }}<br>Contact: {{ r.contact }}<br>
+{% if session.get('role') == 'donor' %}<form method="post" action="{{ url_for('respond', request_id=r.id) }}" class="mt-2"><button class="btn btn-sm btn-success">I Can Help</button></form>{% endif %}
+</div>{% else %}<p>No active requests.</p>{% endfor %}
+</div></div></div>
+<div class="col-lg-5"><div class="card"><div class="card-body"><h3>Open Volunteer Requests</h3>
+{% for r in volunteers %}<div class="border rounded p-3 mb-2"><b>{{ r.assistance }}</b><br>{{ r.location }}<br>Contact: {{ r.contact }}<br><span class="badge bg-warning text-dark">{{ r.urgency }}</span></div>{% else %}<p>No open requests.</p>{% endfor %}
+</div></div></div></div>
+{% endblock %}

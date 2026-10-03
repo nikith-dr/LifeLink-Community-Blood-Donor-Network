@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block title %}LifeLink — Home{% endblock %}
+{% block content %}
+<div class="hero p-5 rounded-4 mb-4">
+<h1 class="display-5 fw-bold">Community Blood Donor & Emergency Volunteer Network</h1>
+<p class="lead">Connect people who need help with community donors and volunteers.</p>
+<a class="btn btn-light btn-lg me-2" href="{{ url_for('register') }}">Join LifeLink</a>
+<a class="btn btn-outline-light btn-lg" href="{{ url_for('login') }}">Login</a>
+</div>
+<div class="row g-4">
+<div class="col-md-6"><div class="card h-100"><div class="card-body">
+<h3>Active Blood Requests</h3>
+{% for r in blood %}<div class="border rounded p-3 mb-2">
+<b>{{ r.blood_group }}</b> — {{ r.units }} unit(s)<br>
+{{ r.hospital }}, {{ r.city }}<br><span class="badge bg-warning text-dark">{{ r.urgency }}</span>
+</div>{% else %}<p>No active requests.</p>{% endfor %}
+</div></div></div>
+<div class="col-md-6"><div class="card h-100"><div class="card-body">
+<h3>Volunteer Requests</h3>
+{% for r in volunteers %}<div class="border rounded p-3 mb-2">
+<b>{{ r.assistance }}</b><br>{{ r.location }}<br><span class="badge bg-warning text-dark">{{ r.urgency }}</span>
+</div>{% else %}<p>No open volunteer requests.</p>{% endfor %}
+</div></div></div>
+</div>
+{% endblock %}
