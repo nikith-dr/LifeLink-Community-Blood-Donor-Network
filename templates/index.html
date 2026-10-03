@@ -1,24 +1,145 @@
-{% extends "base.html" %}{% block title %}LifeLink — Home{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}LifeLink - Home{% endblock %}
+
 {% block content %}
-<div class="hero p-5 rounded-4 mb-4">
-<h1 class="display-5 fw-bold">Community Blood Donor & Emergency Volunteer Network</h1>
-<p class="lead">Connect people who need help with community donors and volunteers.</p>
-<a class="btn btn-light btn-lg me-2" href="{{ url_for('register') }}">Join LifeLink</a>
-<a class="btn btn-outline-light btn-lg" href="{{ url_for('login') }}">Login</a>
+
+<style>
+  .lifelink-home {
+    max-width: 950px;
+    margin: 30px auto;
+    padding: 20px;
+  }
+
+  .hero-box {
+    background: white;
+    padding: 45px 25px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 3px 15px rgba(0,0,0,0.10);
+  }
+
+  .hero-box h1 {
+    font-size: 32px;
+    margin-bottom: 15px;
+  }
+
+  .hero-box p {
+    font-size: 18px;
+    color: #555;
+  }
+
+  .lifelink-buttons {
+    margin-top: 25px;
+  }
+
+  .lifelink-btn {
+    display: inline-block;
+    padding: 13px 24px;
+    margin: 6px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 16px;
+  }
+
+  .lifelink-primary {
+    background: #dc3545;
+    color: white;
+  }
+
+  .lifelink-secondary {
+    border: 1px solid #dc3545;
+    color: #dc3545;
+    background: white;
+  }
+
+  .lifelink-cards {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 25px;
+  }
+
+  .lifelink-card {
+    flex: 1;
+    min-width: 220px;
+    background: white;
+    padding: 25px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+  }
+
+  .lifelink-card h3 {
+    color: #dc3545;
+  }
+</style>
+
+<div class="lifelink-home">
+
+  <div class="hero-box">
+
+    <h1>🩸 Welcome to LifeLink</h1>
+
+    <p>
+      Community Blood Donor & Emergency Volunteer Network
+    </p>
+
+    <p>
+      Connecting blood donors and emergency volunteers
+      with people who need help in their community.
+    </p>
+
+    <div class="lifelink-buttons">
+
+      <a class="lifelink-btn lifelink-primary"
+         href="{{ url_for('register') }}">
+        Join LifeLink
+      </a>
+
+      <a class="lifelink-btn lifelink-secondary"
+         href="{{ url_for('login') }}">
+        Login
+      </a>
+
+    </div>
+
+  </div>
+
+  <div class="lifelink-cards">
+
+    <div class="lifelink-card">
+      <h3>🩸 Blood Donors</h3>
+      <p>
+        Find registered blood donors based on
+        blood group and location.
+      </p>
+    </div>
+
+    <div class="lifelink-card">
+      <h3>🚨 Blood Requests</h3>
+      <p>
+        Create and respond to emergency
+        blood requirements.
+      </p>
+    </div>
+
+    <div class="lifelink-card">
+      <h3>🤝 Volunteers</h3>
+      <p>
+        Connect emergency volunteers with
+        people who need assistance.
+      </p>
+    </div>
+
+  </div>
+
+  <div class="text-center mt-4">
+    <small class="text-muted">
+      LifeLink Academic Project — This is an academic prototype.
+    </small>
+  </div>
+
 </div>
-<div class="row g-4">
-<div class="col-md-6"><div class="card h-100"><div class="card-body">
-<h3>Active Blood Requests</h3>
-{% for r in blood %}<div class="border rounded p-3 mb-2">
-<b>{{ r.blood_group }}</b> — {{ r.units }} unit(s)<br>
-{{ r.hospital }}, {{ r.city }}<br><span class="badge bg-warning text-dark">{{ r.urgency }}</span>
-</div>{% else %}<p>No active requests.</p>{% endfor %}
-</div></div></div>
-<div class="col-md-6"><div class="card h-100"><div class="card-body">
-<h3>Volunteer Requests</h3>
-{% for r in volunteers %}<div class="border rounded p-3 mb-2">
-<b>{{ r.assistance }}</b><br>{{ r.location }}<br><span class="badge bg-warning text-dark">{{ r.urgency }}</span>
-</div>{% else %}<p>No open volunteer requests.</p>{% endfor %}
-</div></div></div>
-</div>
+
 {% endblock %}
