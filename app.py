@@ -472,11 +472,20 @@ def admin():
         ORDER BY r.id DESC
     """).fetchall()
 
+    volunteer_reqs = db.execute("""
+        SELECT vr.*, u.name requester_name
+        FROM volunteer_requests vr
+        JOIN users u ON u.id=vr.requester_id
+        ORDER BY vr.id DESC
+    """).fetchall()
+
     return render_template(
         "admin.html",
         users=users,
         reqs=reqs,
-        responses=responses
+        volunteer_reqs=volunteer_reqs,
+        responses=responses,
+        admin_email=ADMIN_EMAIL
     )
 
 
@@ -520,7 +529,110 @@ def clear_data():
     return redirect(url_for("admin"))
 
 
+
+# -------------------- FULL ADMIN CONTROLS --------------------
+def admin_only():
+    return login_required() and session.get("role") == "admin"
+
+
+@app.post("/admin/user/<int:user_id>/role")
+def admin_change_role(user_id):
+    if not admin_only():
+        flash("Admin access required.", "danger")
+        return redirect(url_for("dashboard"))
+    new_role = request.form.get("role", "").strip()
+    if new_role not in ROLES:
+        flash("Invalid role.", "danger")
+        return redirect(url_for("admin"))
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    if not user:
+        flash("User not found.", "danger")
+        return redirect(url_for("admin"))
+    if user["email"].lower() == ADMIN_EMAIL.lower():
+        flash("Your admin account is protected.", "warning")
+        return redirect(url_for("admin"))
+    db.execute("UPDATE users SET role=? WHERE id=?", (new_role, user_id))
+    db.commit()
+    flash(f"{user['name']} is now a {new_role}.", "success")
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/user/<int:user_id>/availability")
+def admin_toggle_availability(user_id):
+    if not admin_only():
+        flash("Admin access required.", "danger")
+        return redirect(url_for("dashboard"))
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    if not user:
+        flash("User not found.", "danger")
+        return redirect(url_for("admin"))
+    if user["email"].lower() == ADMIN_EMAIL.lower():
+        flash("Your admin account is protected.", "warning")
+        return redirect(url_for("admin"))
+    new_value = 0 if user["available"] else 1
+    db.execute("UPDATE users SET available=? WHERE id=?", (new_value, user_id))
+    db.commit()
+    flash("User availability updated.", "success")
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/user/<int:user_id>/delete")
+def admin_delete_user(user_id):
+    if not admin_only():
+        flash("Admin access required.", "danger")
+        return redirect(url_for("dashboard"))
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    if not user:
+        flash("User not found.", "danger")
+        return redirect(url_for("admin"))
+    if user["email"].lower() == ADMIN_EMAIL.lower() or user["role"] == "admin":
+        flash("Admin accounts are protected from deletion.", "warning")
+        return redirect(url_for("admin"))
+    db.execute("DELETE FROM users WHERE id=?", (user_id,))
+    db.commit()
+    flash(f"User {user['name']} was deleted.", "success")
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/blood-request/<int:request_id>/delete")
+def admin_delete_blood_request(request_id):
+    if not admin_only():
+        flash("Admin access required.", "danger")
+        return redirect(url_for("dashboard"))
+    db = get_db()
+    db.execute("DELETE FROM blood_requests WHERE id=?", (request_id,))
+    db.commit()
+    flash("Blood request deleted.", "success")
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/volunteer-request/<int:request_id>/delete")
+def admin_delete_volunteer_request(request_id):
+    if not admin_only():
+        flash("Admin access required.", "danger")
+        return redirect(url_for("dashboard"))
+    db = get_db()
+    db.execute("DELETE FROM volunteer_requests WHERE id=?", (request_id,))
+    db.commit()
+    flash("Volunteer request deleted.", "success")
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/response/<int:response_id>/delete")
+def admin_delete_response(response_id):
+    if not admin_only():
+        flash("Admin access required.", "danger")
+        return redirect(url_for("dashboard"))
+    db = get_db()
+    db.execute("DELETE FROM responses WHERE id=?", (response_id,))
+    db.commit()
+    flash("Donor response deleted.", "success")
+    return redirect(url_for("admin"))
+
 if __name__ == "__main__":
     init_db()
     app.run(debug=True)
-    
+        
