@@ -1,144 +1,231 @@
 {% extends "base.html" %}
 
-{% block title %}LifeLink - Home{% endblock %}
+{% block title %}LifeLink - Blood Donor Network{% endblock %}
 
 {% block content %}
 
 <style>
-  .lifelink-home {
-    max-width: 950px;
-    margin: 30px auto;
-    padding: 20px;
-  }
+    .hero-section {
+        text-align: center;
+        padding: 60px 20px;
+    }
 
-  .hero-box {
-    background: white;
-    padding: 45px 25px;
-    border-radius: 15px;
-    text-align: center;
-    box-shadow: 0 3px 15px rgba(0,0,0,0.10);
-  }
+    .hero-section h1 {
+        font-size: 48px;
+        font-weight: 700;
+        color: #dc3545;
+        margin-bottom: 15px;
+    }
 
-  .hero-box h1 {
-    font-size: 32px;
-    margin-bottom: 15px;
-  }
+    .hero-section h2 {
+        font-size: 28px;
+        font-weight: 600;
+        margin-bottom: 20px;
+    }
 
-  .hero-box p {
-    font-size: 18px;
-    color: #555;
-  }
+    .hero-section p {
+        font-size: 18px;
+        color: #666;
+        max-width: 750px;
+        margin: 0 auto 35px;
+        line-height: 1.7;
+    }
 
-  .lifelink-buttons {
-    margin-top: 25px;
-  }
+    .lifelink-buttons {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        flex-wrap: wrap;
+    }
 
-  .lifelink-btn {
-    display: inline-block;
-    padding: 13px 24px;
-    margin: 6px;
-    border-radius: 8px;
-    text-decoration: none;
-    font-size: 16px;
-  }
+    .lifelink-btn {
+        display: inline-block;
+        padding: 14px 28px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-size: 17px;
+        font-weight: 600;
+        transition: 0.2s;
+    }
 
-  .lifelink-primary {
-    background: #dc3545;
-    color: white;
-  }
+    .lifelink-primary {
+        background: #dc3545;
+        color: white;
+    }
 
-  .lifelink-secondary {
-    border: 1px solid #dc3545;
-    color: #dc3545;
-    background: white;
-  }
+    .lifelink-primary:hover {
+        background: #bb2d3b;
+        color: white;
+    }
 
-  .lifelink-cards {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-    margin-top: 25px;
-  }
+    .lifelink-secondary {
+        background: #212529;
+        color: white;
+    }
 
-  .lifelink-card {
-    flex: 1;
-    min-width: 220px;
-    background: white;
-    padding: 25px;
-    border-radius: 12px;
-    text-align: center;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-  }
+    .lifelink-secondary:hover {
+        background: #343a40;
+        color: white;
+    }
 
-  .lifelink-card h3 {
-    color: #dc3545;
-  }
+    .admin-btn {
+        background: #6f42c1;
+        color: white;
+    }
+
+    .admin-btn:hover {
+        background: #59339d;
+        color: white;
+    }
+
+    .feature-card {
+        height: 100%;
+        border: none;
+        border-radius: 12px;
+        padding: 25px;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    }
+
+    .feature-icon {
+        font-size: 40px;
+        margin-bottom: 15px;
+    }
+
+    .feature-card h4 {
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+
+    .feature-card p {
+        color: #666;
+        margin-bottom: 0;
+    }
+
+    .about-section {
+        margin-top: 60px;
+        padding: 40px 20px;
+        background: #f8f9fa;
+        border-radius: 15px;
+        text-align: center;
+    }
+
+    .about-section h2 {
+        font-weight: 700;
+        margin-bottom: 15px;
+    }
+
+    .about-section p {
+        max-width: 800px;
+        margin: auto;
+        color: #666;
+        line-height: 1.7;
+    }
 </style>
 
-<div class="lifelink-home">
 
-  <div class="hero-box">
+<!-- HERO SECTION -->
+<div class="hero-section">
 
-    <h1>🩸 Welcome to LifeLink</h1>
+    <h1>❤️ LifeLink</h1>
 
-    <p>
-      Community Blood Donor & Emergency Volunteer Network
-    </p>
+    <h2>Community Blood Donor & Emergency Volunteer Network</h2>
 
     <p>
-      Connecting blood donors and emergency volunteers
-      with people who need help in their community.
+        Connecting blood donors, patients and emergency volunteers
+        to help save lives when every second matters.
     </p>
 
     <div class="lifelink-buttons">
 
-      <a class="lifelink-btn lifelink-primary"
-         href="{{ url_for('register') }}">
-        Join LifeLink
-      </a>
+        <a class="lifelink-btn lifelink-primary"
+           href="{{ url_for('register') }}">
+            🩸 Join LifeLink
+        </a>
 
-      <a class="lifelink-btn lifelink-secondary"
-         href="{{ url_for('login') }}">
-        Login
-      </a>
+        <a class="lifelink-btn lifelink-secondary"
+           href="{{ url_for('login') }}">
+            👤 User Login
+        </a>
+
+        <a class="lifelink-btn admin-btn"
+           href="{{ url_for('admin_login') }}">
+            🔐 Admin Login
+        </a>
 
     </div>
 
-  </div>
+</div>
 
-  <div class="lifelink-cards">
 
-    <div class="lifelink-card">
-      <h3>🩸 Blood Donors</h3>
-      <p>
-        Find registered blood donors based on
-        blood group and location.
-      </p>
+<!-- FEATURES -->
+<div class="container mt-4">
+
+    <div class="row g-4">
+
+        <div class="col-md-4">
+            <div class="feature-card">
+
+                <div class="feature-icon">🩸</div>
+
+                <h4>Find Blood Donors</h4>
+
+                <p>
+                    Find suitable blood donors quickly
+                    during emergency situations.
+                </p>
+
+            </div>
+        </div>
+
+
+        <div class="col-md-4">
+            <div class="feature-card">
+
+                <div class="feature-icon">🚨</div>
+
+                <h4>Emergency Requests</h4>
+
+                <p>
+                    Create urgent blood requests and
+                    connect with available donors.
+                </p>
+
+            </div>
+        </div>
+
+
+        <div class="col-md-4">
+            <div class="feature-card">
+
+                <div class="feature-icon">🤝</div>
+
+                <h4>Volunteer Support</h4>
+
+                <p>
+                    Volunteers can help people during
+                    emergency situations.
+                </p>
+
+            </div>
+        </div>
+
     </div>
 
-    <div class="lifelink-card">
-      <h3>🚨 Blood Requests</h3>
-      <p>
-        Create and respond to emergency
-        blood requirements.
-      </p>
+
+    <!-- ABOUT -->
+    <div class="about-section">
+
+        <h2>About LifeLink</h2>
+
+        <p>
+            LifeLink is a community-based platform designed to
+            connect blood donors, people in need of blood and
+            emergency volunteers. The goal is to make emergency
+            support faster, easier and more organized.
+        </p>
+
     </div>
-
-    <div class="lifelink-card">
-      <h3>🤝 Volunteers</h3>
-      <p>
-        Connect emergency volunteers with
-        people who need assistance.
-      </p>
-    </div>
-
-  </div>
-
-  <div class="text-center mt-4">
-    <small class="text-muted">
-      LifeLink Academic Project — This is an academic prototype.
-    </small>
-  </div>
 
 </div>
 
