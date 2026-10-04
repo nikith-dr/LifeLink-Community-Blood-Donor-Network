@@ -4,19 +4,25 @@ from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, session, flash, g
 from werkzeug.security import generate_password_hash, check_password_hash
 
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "lifelink.db")
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("LIFELINK_SECRET_KEY", "change-this-secret-key")
+app.secret_key = os.environ.get(
+    "LIFELINK_SECRET_KEY",
+    "change-this-secret-key"
+)
 
 BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
 ROLES = ["donor", "requester", "volunteer"]
 
-# The only admin account
+# Only administrator
 ADMIN_EMAIL = "nikithdr@gmail.com"
 ADMIN_PASSWORD = "niki@2007"
 
+
+# -------------------- DATABASE --------------------
 
 def get_db():
     if "db" not in g:
@@ -29,6 +35,7 @@ def get_db():
 @app.teardown_appcontext
 def close_db(error=None):
     db = g.pop("db", None)
+
     if db is not None:
         db.close()
 
@@ -62,7 +69,9 @@ def init_db():
         notes TEXT,
         status TEXT DEFAULT 'Active',
         created_at TEXT NOT NULL,
-        FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (requester_id)
+            REFERENCES users(id)
+            ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS volunteer_requests (
@@ -75,7 +84,9 @@ def init_db():
         notes TEXT,
         status TEXT DEFAULT 'Open',
         created_at TEXT NOT NULL,
-        FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (requester_id)
+            REFERENCES users(id)
+            ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS responses (
@@ -85,17 +96,26 @@ def init_db():
         response TEXT NOT NULL DEFAULT 'I Can Help',
         created_at TEXT NOT NULL,
         UNIQUE(request_id, donor_id),
-        FOREIGN KEY (request_id) REFERENCES blood_requests(id) ON DELETE CASCADE,
-        FOREIGN KEY (donor_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (request_id)
+            REFERENCES blood_requests(id)
+            ON DELETE CASCADE,
+        FOREIGN KEY (donor_id)
+            REFERENCES users(id)
+            ON DELETE CASCADE
     );
     """)
 
-    # Make sure only the owner's account has the admin role.
+    # Remove admin role from every other account.
     db.execute(
-        "UPDATE users SET role='volunteer' WHERE role='admin' AND email != ?",
+        """
+        UPDATE users
+        SET role='volunteer'
+        WHERE role='admin' AND email != ?
+        """,
         (ADMIN_EMAIL,)
     )
 
+    # Create or reset the owner's admin account.
     existing = db.execute(
         "SELECT id FROM users WHERE email=?",
         (ADMIN_EMAIL,)
@@ -103,9 +123,12 @@ def init_db():
 
     if not existing:
         db.execute(
-            """INSERT INTO users
-            (name,email,password,phone,role,blood_group,city,available,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?)""",
+            """
+            INSERT INTO users
+            (name, email, password, phone, role,
+             blood_group, city, available, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 "Nikith D R",
                 ADMIN_EMAIL,
@@ -118,11 +141,14 @@ def init_db():
                 datetime.now().isoformat(timespec="seconds")
             )
         )
+
     else:
         db.execute(
-            """UPDATE users
+            """
+            UPDATE users
             SET name=?, password=?, role=?
-            WHERE email=?""",
+            WHERE email=?
+            """,
             (
                 "Nikith D R",
                 generate_password_hash(ADMIN_PASSWORD),
@@ -141,37 +167,53 @@ def before_request():
 
 @app.context_processor
 def inject_globals():
-    return {"blood_groups": BLOOD_GROUPS}
+    return {
+        "blood_groups": BLOOD_GROUPS
+    }
 
+
+# -------------------- HOME --------------------
 
 @app.route("/")
 def index():
     db = get_db()
 
-    blood = db.execute("""
+    blood = db.execute(
+        """
         SELECT br.*, u.name AS requester_name
         FROM blood_requests br
         JOIN users u ON u.id=br.requester_id
         WHERE br.status='Active'
         ORDER BY br.id DESC
         LIMIT 8
-    """).fetchall()
+        """
+    ).fetchall()
 
-    volunteers = db.execute("""
+    volunteers = db.execute(
+        """
         SELECT vr.*, u.name AS requester_name
         FROM volunteer_requests vr
         JOIN users u ON u.id=vr.requester_id
         WHERE vr.status='Open'
         ORDER BY vr.id DESC
         LIMIT 8
-    """).fetchall()
+        """
+    ).fetchall()
 
-    return render_template("index.html", blood=blood, volunteers=volunteers)
+    return render_template(
+        "index.html",
+        blood=blood,
+        volunteers=volunteers
+    )
 
+
+# -------------------- USER REGISTRATION --------------------
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
+
     if request.method == "POST":
+
         name = request.form["name"].strip()
         email = request.form["email"].strip().lower()
         password = request.form["password"]
@@ -180,459 +222,189 @@ def register():
         blood_group = request.form.get("blood_group") or None
         city = request.form["city"].strip()
 
-        # Admin is never accepted from the public registration form.
         if role not in ROLES:
             flash("Invalid role.", "danger")
             return redirect(url_for("register"))
 
-        # Reserve the admin email.
+        # Admin email cannot be registered by normal users.
         if email == ADMIN_EMAIL:
-            flash("This email is reserved for the administrator.", "danger")
+            flash(
+                "This email is reserved for the administrator.",
+                "danger"
+            )
             return redirect(url_for("register"))
 
         if role == "donor" and blood_group not in BLOOD_GROUPS:
-            flash("Donors must select a valid blood group.", "danger")
+            flash(
+                "Donors must select a valid blood group.",
+                "danger"
+            )
             return redirect(url_for("register"))
 
         if len(password) < 6:
-            flash("Password must contain at least 6 characters.", "danger")
+            flash(
+                "Password must contain at least 6 characters.",
+                "danger"
+            )
             return redirect(url_for("register"))
 
         db = get_db()
 
         try:
-            db.execute("""
+            db.execute(
+                """
                 INSERT INTO users
-                (name,email,password,phone,role,blood_group,city,available,created_at)
-                VALUES (?,?,?,?,?,?,?,?,?)
-            """, (
-                name,
-                email,
-                generate_password_hash(password),
-                phone,
-                role,
-                blood_group,
-                city,
-                1,
-                datetime.now().isoformat(timespec="seconds")
-            ))
+                (name, email, password, phone, role,
+                 blood_group, city, available, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    name,
+                    email,
+                    generate_password_hash(password),
+                    phone,
+                    role,
+                    blood_group,
+                    city,
+                    1,
+                    datetime.now().isoformat(timespec="seconds")
+                )
+            )
+
             db.commit()
 
-            flash("Registration successful. Please login.", "success")
+            flash(
+                "Registration successful. Please login.",
+                "success"
+            )
+
             return redirect(url_for("login"))
 
         except sqlite3.IntegrityError:
-            flash("That email is already registered.", "danger")
+            flash(
+                "That email is already registered.",
+                "danger"
+            )
 
     return render_template("register.html")
 
 
+# -------------------- NORMAL USER LOGIN --------------------
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
+
     if request.method == "POST":
+
         email = request.form["email"].strip().lower()
         password = request.form["password"]
+
+        # Admin must use the separate Admin Login.
+        if email == ADMIN_EMAIL:
+            flash(
+                "Please use the Admin Login option.",
+                "warning"
+            )
+            return redirect(url_for("admin_login"))
 
         user = get_db().execute(
             "SELECT * FROM users WHERE email=?",
             (email,)
         ).fetchone()
 
-        if user and check_password_hash(user["password"], password):
+        if user and check_password_hash(
+            user["password"],
+            password
+        ):
+
             session.clear()
+
             session["user_id"] = user["id"]
             session["role"] = user["role"]
             session["name"] = user["name"]
 
-            flash("Welcome to LifeLink.", "success")
+            flash(
+                "Welcome to LifeLink.",
+                "success"
+            )
+
             return redirect(url_for("dashboard"))
 
-        flash("Invalid email or password.", "danger")
+        flash(
+            "Invalid email or password.",
+            "danger"
+        )
 
     return render_template("login.html")
 
 
+# -------------------- SEPARATE ADMIN LOGIN --------------------
+
+@app.route("/admin-login", methods=["GET", "POST"])
+def admin_login():
+
+    if request.method == "POST":
+
+        email = request.form["email"].strip().lower()
+        password = request.form["password"]
+
+        # Only the administrator email is accepted here.
+        if email != ADMIN_EMAIL:
+            flash(
+                "Only the system administrator can use this login.",
+                "danger"
+            )
+            return redirect(url_for("admin_login"))
+
+        user = get_db().execute(
+            """
+            SELECT * FROM users
+            WHERE email=? AND role='admin'
+            """,
+            (email,)
+        ).fetchone()
+
+        if user and check_password_hash(
+            user["password"],
+            password
+        ):
+
+            session.clear()
+
+            session["user_id"] = user["id"]
+            session["role"] = "admin"
+            session["name"] = user["name"]
+
+            flash(
+                "Admin login successful.",
+                "success"
+            )
+
+            return redirect(url_for("admin"))
+
+        flash(
+            "Invalid admin email or password.",
+            "danger"
+        )
+
+    return render_template("admin_login.html")
+
+
+# -------------------- LOGOUT --------------------
+
 @app.route("/logout")
 def logout():
+
     session.clear()
-    flash("You have been logged out.", "info")
+
+    flash(
+        "You have been logged out.",
+        "info"
+    )
+
     return redirect(url_for("index"))
 
 
-def login_required():
-    if "user_id" not in session:
-        flash("Please login first.", "warning")
-        return False
-    return True
+# -------------------- LOGIN CHECK --------------------
 
-
-@app.route("/dashboard")
-def dashboard():
-    if not login_required():
-        return redirect(url_for("login"))
-
-    db = get_db()
-
-    user = db.execute(
-        "SELECT * FROM users WHERE id=?",
-        (session["user_id"],)
-    ).fetchone()
-
-    requests = db.execute("""
-        SELECT br.*, u.name AS requester_name
-        FROM blood_requests br
-        JOIN users u ON u.id=br.requester_id
-        WHERE br.status='Active'
-        ORDER BY br.id DESC
-    """).fetchall()
-
-    volunteers = db.execute("""
-        SELECT vr.*, u.name AS requester_name
-        FROM volunteer_requests vr
-        JOIN users u ON u.id=vr.requester_id
-        WHERE vr.status='Open'
-        ORDER BY vr.id DESC
-    """).fetchall()
-
-    return render_template(
-        "dashboard.html",
-        user=user,
-        requests=requests,
-        volunteers=volunteers
-    )
-
-
-@app.route("/blood-request", methods=["GET", "POST"])
-def blood_request():
-    if not login_required():
-        return redirect(url_for("login"))
-
-    if request.method == "POST":
-        db = get_db()
-
-        db.execute("""
-            INSERT INTO blood_requests
-            (requester_id,blood_group,units,hospital,city,urgency,contact,notes,status,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
-        """, (
-            session["user_id"],
-            request.form["blood_group"],
-            int(request.form["units"]),
-            request.form["hospital"].strip(),
-            request.form["city"].strip(),
-            request.form["urgency"],
-            request.form["contact"].strip(),
-            request.form.get("notes", "").strip(),
-            "Active",
-            datetime.now().isoformat(timespec="seconds")
-        ))
-
-        db.commit()
-
-        flash("Blood request created.", "success")
-        return redirect(url_for("dashboard"))
-
-    return render_template("blood_request.html")
-
-
-@app.route("/volunteer-request", methods=["GET", "POST"])
-def volunteer_request():
-    if not login_required():
-        return redirect(url_for("login"))
-
-    if request.method == "POST":
-        db = get_db()
-
-        db.execute("""
-            INSERT INTO volunteer_requests
-            (requester_id,assistance,location,urgency,contact,notes,status,created_at)
-            VALUES (?,?,?,?,?,?,?,?)
-        """, (
-            session["user_id"],
-            request.form["assistance"].strip(),
-            request.form["location"].strip(),
-            request.form["urgency"],
-            request.form["contact"].strip(),
-            request.form.get("notes", "").strip(),
-            "Open",
-            datetime.now().isoformat(timespec="seconds")
-        ))
-
-        db.commit()
-
-        flash("Volunteer request created.", "success")
-        return redirect(url_for("dashboard"))
-
-    return render_template("volunteer_request.html")
-
-
-@app.route("/donors")
-def donors():
-    if not login_required():
-        return redirect(url_for("login"))
-
-    bg = request.args.get("blood_group", "")
-    city = request.args.get("city", "").strip()
-
-    sql = "SELECT * FROM users WHERE role='donor' AND available=1"
-    params = []
-
-    if bg:
-        sql += " AND blood_group=?"
-        params.append(bg)
-
-    if city:
-        sql += " AND city LIKE ?"
-        params.append(f"%{city}%")
-
-    sql += " ORDER BY name"
-
-    rows = get_db().execute(sql, params).fetchall()
-
-    return render_template(
-        "donors.html",
-        donors=rows,
-        selected_bg=bg,
-        selected_city=city
-    )
-
-
-@app.post("/respond/<int:request_id>")
-def respond(request_id):
-    if not login_required():
-        return redirect(url_for("login"))
-
-    if session.get("role") != "donor":
-        flash("Only donor accounts can respond to blood requests.", "warning")
-        return redirect(url_for("dashboard"))
-
-    db = get_db()
-
-    req = db.execute(
-        "SELECT * FROM blood_requests WHERE id=? AND status='Active'",
-        (request_id,)
-    ).fetchone()
-
-    if not req:
-        flash("Request is not available.", "danger")
-        return redirect(url_for("dashboard"))
-
-    try:
-        db.execute(
-            """INSERT INTO responses
-            (request_id,donor_id,response,created_at)
-            VALUES(?,?,?,?)""",
-            (
-                request_id,
-                session["user_id"],
-                "I Can Help",
-                datetime.now().isoformat(timespec="seconds")
-            )
-        )
-
-        db.commit()
-
-        flash(
-            "Your response has been recorded. Please contact the requester.",
-            "success"
-        )
-
-    except sqlite3.IntegrityError:
-        flash("You have already responded to this request.", "info")
-
-    return redirect(url_for("dashboard"))
-
-
-@app.route("/admin")
-def admin():
-    if not login_required() or session.get("role") != "admin":
-        flash("Admin access required.", "danger")
-        return redirect(url_for("dashboard"))
-
-    db = get_db()
-
-    users = db.execute("""
-        SELECT id,name,email,phone,role,blood_group,city,available
-        FROM users
-        ORDER BY id DESC
-    """).fetchall()
-
-    reqs = db.execute("""
-        SELECT br.*,u.name requester_name
-        FROM blood_requests br
-        JOIN users u ON u.id=br.requester_id
-        ORDER BY br.id DESC
-    """).fetchall()
-
-    responses = db.execute("""
-        SELECT r.*, u.name donor_name, br.blood_group, br.hospital
-        FROM responses r
-        JOIN users u ON u.id=r.donor_id
-        JOIN blood_requests br ON br.id=r.request_id
-        ORDER BY r.id DESC
-    """).fetchall()
-
-    volunteer_reqs = db.execute("""
-        SELECT vr.*, u.name requester_name
-        FROM volunteer_requests vr
-        JOIN users u ON u.id=vr.requester_id
-        ORDER BY vr.id DESC
-    """).fetchall()
-
-    return render_template(
-        "admin.html",
-        users=users,
-        reqs=reqs,
-        volunteer_reqs=volunteer_reqs,
-        responses=responses,
-        admin_email=ADMIN_EMAIL
-    )
-
-
-@app.post("/admin/request/<int:request_id>/<status>")
-def update_request(request_id, status):
-    if not login_required() or session.get("role") != "admin":
-        flash("Admin access required.", "danger")
-        return redirect(url_for("dashboard"))
-
-    if status not in ["Active", "Fulfilled", "Cancelled"]:
-        flash("Invalid status.", "danger")
-        return redirect(url_for("admin"))
-
-    db = get_db()
-
-    db.execute(
-        "UPDATE blood_requests SET status=? WHERE id=?",
-        (status, request_id)
-    )
-    db.commit()
-
-    flash(f"Request marked {status}.", "success")
-    return redirect(url_for("admin"))
-
-
-@app.post("/admin/clear-data")
-def clear_data():
-    if not login_required() or session.get("role") != "admin":
-        flash("Admin access required.", "danger")
-        return redirect(url_for("dashboard"))
-
-    db = get_db()
-
-    # Responses depend on blood requests, so clear them first.
-    db.execute("DELETE FROM responses")
-    db.execute("DELETE FROM blood_requests")
-    db.execute("DELETE FROM volunteer_requests")
-    db.commit()
-
-    flash("All blood and volunteer request data has been cleared.", "success")
-    return redirect(url_for("admin"))
-
-
-
-# -------------------- FULL ADMIN CONTROLS --------------------
-def admin_only():
-    return login_required() and session.get("role") == "admin"
-
-
-@app.post("/admin/user/<int:user_id>/role")
-def admin_change_role(user_id):
-    if not admin_only():
-        flash("Admin access required.", "danger")
-        return redirect(url_for("dashboard"))
-    new_role = request.form.get("role", "").strip()
-    if new_role not in ROLES:
-        flash("Invalid role.", "danger")
-        return redirect(url_for("admin"))
-    db = get_db()
-    user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-    if not user:
-        flash("User not found.", "danger")
-        return redirect(url_for("admin"))
-    if user["email"].lower() == ADMIN_EMAIL.lower():
-        flash("Your admin account is protected.", "warning")
-        return redirect(url_for("admin"))
-    db.execute("UPDATE users SET role=? WHERE id=?", (new_role, user_id))
-    db.commit()
-    flash(f"{user['name']} is now a {new_role}.", "success")
-    return redirect(url_for("admin"))
-
-
-@app.post("/admin/user/<int:user_id>/availability")
-def admin_toggle_availability(user_id):
-    if not admin_only():
-        flash("Admin access required.", "danger")
-        return redirect(url_for("dashboard"))
-    db = get_db()
-    user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-    if not user:
-        flash("User not found.", "danger")
-        return redirect(url_for("admin"))
-    if user["email"].lower() == ADMIN_EMAIL.lower():
-        flash("Your admin account is protected.", "warning")
-        return redirect(url_for("admin"))
-    new_value = 0 if user["available"] else 1
-    db.execute("UPDATE users SET available=? WHERE id=?", (new_value, user_id))
-    db.commit()
-    flash("User availability updated.", "success")
-    return redirect(url_for("admin"))
-
-
-@app.post("/admin/user/<int:user_id>/delete")
-def admin_delete_user(user_id):
-    if not admin_only():
-        flash("Admin access required.", "danger")
-        return redirect(url_for("dashboard"))
-    db = get_db()
-    user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-    if not user:
-        flash("User not found.", "danger")
-        return redirect(url_for("admin"))
-    if user["email"].lower() == ADMIN_EMAIL.lower() or user["role"] == "admin":
-        flash("Admin accounts are protected from deletion.", "warning")
-        return redirect(url_for("admin"))
-    db.execute("DELETE FROM users WHERE id=?", (user_id,))
-    db.commit()
-    flash(f"User {user['name']} was deleted.", "success")
-    return redirect(url_for("admin"))
-
-
-@app.post("/admin/blood-request/<int:request_id>/delete")
-def admin_delete_blood_request(request_id):
-    if not admin_only():
-        flash("Admin access required.", "danger")
-        return redirect(url_for("dashboard"))
-    db = get_db()
-    db.execute("DELETE FROM blood_requests WHERE id=?", (request_id,))
-    db.commit()
-    flash("Blood request deleted.", "success")
-    return redirect(url_for("admin"))
-
-
-@app.post("/admin/volunteer-request/<int:request_id>/delete")
-def admin_delete_volunteer_request(request_id):
-    if not admin_only():
-        flash("Admin access required.", "danger")
-        return redirect(url_for("dashboard"))
-    db = get_db()
-    db.execute("DELETE FROM volunteer_requests WHERE id=?", (request_id,))
-    db.commit()
-    flash("Volunteer request deleted.", "success")
-    return redirect(url_for("admin"))
-
-
-@app.post("/admin/response/<int:response_id>/delete")
-def admin_delete_response(response_id):
-    if not admin_only():
-        flash("Admin access required.", "danger")
-        return redirect(url_for("dashboard"))
-    db = get_db()
-    db.execute("DELETE FROM responses WHERE id=?", (response_id,))
-    db.commit()
-    flash("Donor response deleted.", "success")
-    return redirect(url_for("admin"))
-
-if __name__ == "__main__":
-    init_db()
-    app.run(debug=True)
-        
+def login
