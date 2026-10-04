@@ -987,4 +987,195 @@ def admin_status(request_id, status):
         "Fulfilled",
         "Cancelled"
     ]:
-        return redirect(url_for("admin
+                return redirect(url_for("admin"))
+
+    db = get_db()
+
+    db.execute(
+        "UPDATE blood_requests SET status=? WHERE id=?",
+        (status, request_id)
+    )
+
+    db.commit()
+
+    flash("Blood request status updated.", "success")
+    return redirect(url_for("admin"))
+
+
+# ============================================================
+# ADMIN - USER ROLE
+# ============================================================
+
+@app.route("/admin/user/<int:user_id>/role", methods=["POST"])
+def admin_user_role(user_id):
+    if session.get("role") != "admin":
+        return redirect(url_for("admin_login"))
+
+    role = request.form.get("role", "").strip()
+
+    if role not in ["donor", "requester", "volunteer", "admin"]:
+        flash("Invalid role.", "danger")
+        return redirect(url_for("admin"))
+
+    db = get_db()
+
+    # Keep only the main administrator as admin
+    if role == "admin":
+        flash("The main administrator cannot be changed here.", "warning")
+        return redirect(url_for("admin"))
+
+    db.execute(
+        "UPDATE users SET role=? WHERE id=?",
+        (role, user_id)
+    )
+    db.commit()
+
+    flash("User role updated.", "success")
+    return redirect(url_for("admin"))
+
+
+# ============================================================
+# ADMIN - AVAILABILITY
+# ============================================================
+
+@app.route("/admin/user/<int:user_id>/availability", methods=["POST"])
+def admin_availability(user_id):
+    if session.get("role") != "admin":
+        return redirect(url_for("admin_login"))
+
+    available = request.form.get("available", "0")
+
+    db = get_db()
+
+    db.execute(
+        "UPDATE users SET available=? WHERE id=?",
+        (1 if available == "1" else 0, user_id)
+    )
+
+    db.commit()
+
+    flash("Availability updated.", "success")
+    return redirect(url_for("admin"))
+
+
+# ============================================================
+# ADMIN - DELETE USER
+# ============================================================
+
+@app.route("/admin/user/<int:user_id>/delete", methods=["POST"])
+def admin_delete_user(user_id):
+    if session.get("role") != "admin":
+        return redirect(url_for("admin_login"))
+
+    db = get_db()
+
+    user = db.execute(
+        "SELECT * FROM users WHERE id=?",
+        (user_id,)
+    ).fetchone()
+
+    if not user:
+        flash("User not found.", "danger")
+        return redirect(url_for("admin"))
+
+    if user["email"] == ADMIN_EMAIL:
+        flash("The main administrator cannot be deleted.", "danger")
+        return redirect(url_for("admin"))
+
+    db.execute(
+        "DELETE FROM responses WHERE donor_id=?",
+        (user_id,)
+    )
+
+    db.execute(
+        "DELETE FROM users WHERE id=?",
+        (user_id,)
+    )
+
+    db.commit()
+
+    flash("User deleted successfully.", "success")
+    return redirect(url_for("admin"))
+
+
+# ============================================================
+# ADMIN - DELETE BLOOD REQUEST
+# ============================================================
+
+@app.route("/admin/blood-request/<int:request_id>/delete", methods=["POST"])
+def admin_delete_blood_request(request_id):
+    if session.get("role") != "admin":
+        return redirect(url_for("admin_login"))
+
+    db = get_db()
+
+    db.execute(
+        "DELETE FROM responses WHERE request_id=?",
+        (request_id,)
+    )
+
+    db.execute(
+        "DELETE FROM blood_requests WHERE id=?",
+        (request_id,)
+    )
+
+    db.commit()
+
+    flash("Blood request deleted.", "success")
+    return redirect(url_for("admin"))
+
+
+# ============================================================
+# ADMIN - DELETE VOLUNTEER REQUEST
+# ============================================================
+
+@app.route("/admin/volunteer-request/<int:request_id>/delete", methods=["POST"])
+def admin_delete_volunteer_request(request_id):
+    if session.get("role") != "admin":
+        return redirect(url_for("admin_login"))
+
+    db = get_db()
+
+    db.execute(
+        "DELETE FROM volunteer_requests WHERE id=?",
+        (request_id,)
+    )
+
+    db.commit()
+
+    flash("Volunteer request deleted.", "success")
+    return redirect(url_for("admin"))
+
+
+# ============================================================
+# ADMIN - DELETE RESPONSE
+# ============================================================
+
+@app.route("/admin/response/<int:response_id>/delete", methods=["POST"])
+def admin_delete_response(response_id):
+    if session.get("role") != "admin":
+        return redirect(url_for("admin_login"))
+
+    db = get_db()
+
+    db.execute(
+        "DELETE FROM responses WHERE id=?",
+        (response_id,)
+    )
+
+    db.commit()
+
+    flash("Donor response deleted.", "success")
+    return redirect(url_for("admin"))
+
+
+# ============================================================
+# RUN APPLICATION
+# ============================================================
+
+if __name__ == "__main__":
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        debug=False
+    )
