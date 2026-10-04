@@ -1,30 +1,25 @@
 import os
 import sqlite3
 from datetime import datetime
-
-from flask import Flask, render_template, request, redirect, url_for, session, flash, g
+from flask import Flask, render_template, render_template_string, request
+from flask import redirect, url_for, session, flash, g
 from werkzeug.security import generate_password_hash, check_password_hash
-
 
 app = Flask(__name__)
 
 app.secret_key = os.environ.get(
-    "LIFELINK_SECRET_KEY",
+    "SECRET_KEY",
     "lifelink-secret-key-2026"
 )
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "lifelink.db")
+DB = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "lifelink.db"
+)
 
 BLOOD_GROUPS = [
     "A+", "A-", "B+", "B-",
     "AB+", "AB-", "O+", "O-"
-]
-
-ROLES = [
-    "donor",
-    "requester",
-    "volunteer"
 ]
 
 ADMIN_EMAIL = "nikithdr@gmail.com"
@@ -38,7 +33,7 @@ ADMIN_NAME = "Nikith D R"
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
+        g.db = sqlite3.connect(DB)
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
@@ -48,11 +43,16 @@ def get_db():
 def close_db(error=None):
     db = g.pop("db", None)
 
-    if db is not None:
+    if db:
         db.close()
 
 
+def now():
+    return datetime.now().isoformat(timespec="seconds")
+
+
 def init_db():
+
     db = get_db()
 
     db.executescript("""
@@ -81,7 +81,7 @@ def init_db():
             notes TEXT,
             status TEXT DEFAULT 'Active',
             created_at TEXT NOT NULL,
-            FOREIGN KEY (requester_id)
+            FOREIGN KEY(requester_id)
                 REFERENCES users(id)
                 ON DELETE CASCADE
         );
@@ -96,7 +96,7 @@ def init_db():
             notes TEXT,
             status TEXT DEFAULT 'Open',
             created_at TEXT NOT NULL,
-            FOREIGN KEY (requester_id)
+            FOREIGN KEY(requester_id)
                 REFERENCES users(id)
                 ON DELETE CASCADE
         );
@@ -105,33 +105,36 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             request_id INTEGER NOT NULL,
             donor_id INTEGER NOT NULL,
-            response TEXT NOT NULL DEFAULT 'I Can Help',
+            response TEXT DEFAULT 'I Can Help',
             created_at TEXT NOT NULL,
             UNIQUE(request_id, donor_id),
-            FOREIGN KEY (request_id)
+            FOREIGN KEY(request_id)
                 REFERENCES blood_requests(id)
                 ON DELETE CASCADE,
-            FOREIGN KEY (donor_id)
+            FOREIGN KEY(donor_id)
                 REFERENCES users(id)
                 ON DELETE CASCADE
         );
     """)
 
-    # Remove admin role from everyone except the official admin
-    db.execute("""
-        UPDATE users
-        SET role='volunteer'
-        WHERE role='admin'
-        AND email != ?
-    """, (ADMIN_EMAIL,))
-
-    # Create official admin if it doesn't exist
     admin = db.execute(
         "SELECT id FROM users WHERE email=?",
         (ADMIN_EMAIL,)
     ).fetchone()
 
-    if admin is None:
+    if admin:
+        db.execute("""
+            UPDATE users
+            SET name=?,
+                password=?,
+                role='admin'
+            WHERE email=?
+        """, (
+            ADMIN_NAME,
+            generate_password_hash(ADMIN_PASSWORD),
+            ADMIN_EMAIL
+        ))
+    else:
         db.execute("""
             INSERT INTO users
             (
@@ -145,42 +148,33 @@ def init_db():
                 available,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, 'admin', NULL, ?, 1, ?)
         """, (
             ADMIN_NAME,
             ADMIN_EMAIL,
             generate_password_hash(ADMIN_PASSWORD),
-            "9999999999",
-            "admin",
-            None,
+            "",
             "Bengaluru",
-            1,
-            datetime.now().isoformat(timespec="seconds")
+            now()
         ))
-    else:
-        # Keep official admin credentials correct
-        db.execute("""
-            UPDATE users
-            SET name=?,
-                password=?,
-                role='admin'
-            WHERE email=?
-        """, (
-            ADMIN_NAME,
-            generate_password_hash(ADMIN_PASSWORD),
-            ADMIN_EMAIL
-        ))
+
+    db.execute("""
+        UPDATE users
+        SET role='donor'
+        WHERE role='admin'
+        AND email != ?
+    """, (ADMIN_EMAIL,))
 
     db.commit()
 
 
 @app.before_request
-def before_request():
+def start_app():
     init_db()
 
 
 @app.context_processor
-def inject_globals():
+def globals_for_templates():
     return {
         "blood_groups": BLOOD_GROUPS
     }
@@ -208,7 +202,7 @@ def register():
         email = request.form["email"].strip().lower()
         password = request.form["password"]
         phone = request.form["phone"].strip()
-        role = request.form["role"].strip()
+        role = request.form.get("role", "donor")
         blood_group = request.form.get("blood_group") or None
         city = request.form["city"].strip()
 
@@ -219,27 +213,21 @@ def register():
             )
             return redirect(url_for("register"))
 
-        if role not in ROLES:
-            flash("Invalid role.", "danger")
-            return redirect(url_for("register"))
+        if role not in ["donor", "requester", "volunteer"]:
+            role = "donor"
 
-        if role == "donor" and blood_group not in BLOOD_GROUPS:
-            flash(
-                "Please select a valid blood group.",
-                "danger"
-            )
-            return redirect(url_for("register"))
-
-        if len(password) < 6:
-            flash(
-                "Password must contain at least 6 characters.",
-                "danger"
-            )
-            return redirect(url_for("register"))
+        if role == "donor":
+            if blood_group not in BLOOD_GROUPS:
+                flash(
+                    "Please select a valid blood group.",
+                    "danger"
+                )
+                return redirect(url_for("register"))
 
         db = get_db()
 
         try:
+
             db.execute("""
                 INSERT INTO users
                 (
@@ -253,7 +241,7 @@ def register():
                     available,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
             """, (
                 name,
                 email,
@@ -262,8 +250,7 @@ def register():
                 role,
                 blood_group,
                 city,
-                1,
-                datetime.now().isoformat(timespec="seconds")
+                now()
             ))
 
             db.commit()
@@ -276,6 +263,7 @@ def register():
             return redirect(url_for("login"))
 
         except sqlite3.IntegrityError:
+
             flash(
                 "That email is already registered.",
                 "danger"
@@ -296,7 +284,6 @@ def login():
         email = request.form["email"].strip().lower()
         password = request.form["password"]
 
-        # Admin must use separate login
         if email == ADMIN_EMAIL:
             flash(
                 "Please use the separate Admin Login.",
@@ -320,11 +307,6 @@ def login():
             session["role"] = user["role"]
             session["name"] = user["name"]
 
-            flash(
-                "Welcome to LifeLink.",
-                "success"
-            )
-
             return redirect(url_for("dashboard"))
 
         flash(
@@ -347,13 +329,6 @@ def admin_login():
         email = request.form["email"].strip().lower()
         password = request.form["password"]
 
-        if email != ADMIN_EMAIL:
-            flash(
-                "Only the system administrator can use this login.",
-                "danger"
-            )
-            return redirect(url_for("admin_login"))
-
         user = get_db().execute("""
             SELECT *
             FROM users
@@ -361,9 +336,13 @@ def admin_login():
             AND role='admin'
         """, (email,)).fetchone()
 
-        if user and check_password_hash(
-            user["password"],
-            password
+        if (
+            email == ADMIN_EMAIL
+            and user
+            and check_password_hash(
+                user["password"],
+                password
+            )
         ):
 
             session.clear()
@@ -372,11 +351,6 @@ def admin_login():
             session["role"] = "admin"
             session["name"] = user["name"]
 
-            flash(
-                "Admin login successful.",
-                "success"
-            )
-
             return redirect(url_for("admin"))
 
         flash(
@@ -384,7 +358,109 @@ def admin_login():
             "danger"
         )
 
-    return render_template("admin_login.html")
+    return render_template_string("""
+<!doctype html>
+<html>
+<head>
+    <title>LifeLink Admin Login</title>
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet">
+</head>
+
+<body class="bg-light">
+
+<div class="container mt-5">
+
+<div class="row justify-content-center">
+
+<div class="col-md-6">
+
+<div class="card shadow">
+
+<div class="card-body p-4">
+
+<h2 class="text-center mb-4">
+    🔐 LifeLink Admin Login
+</h2>
+
+{% with messages =
+    get_flashed_messages(with_categories=true) %}
+
+{% for category, message in messages %}
+
+<div class="alert alert-{{ category }}">
+    {{ message }}
+</div>
+
+{% endfor %}
+
+{% endwith %}
+
+<form method="post">
+
+<label class="form-label">
+    Admin Email
+</label>
+
+<input
+    type="email"
+    name="email"
+    class="form-control mb-3"
+    required
+>
+
+<label class="form-label">
+    Admin Password
+</label>
+
+<input
+    type="password"
+    name="password"
+    class="form-control mb-3"
+    required
+>
+
+<button
+    class="btn btn-danger w-100"
+    type="submit">
+
+    🔐 Login as Admin
+
+</button>
+
+</form>
+
+<div class="text-center mt-3">
+
+<a href="{{ url_for('login') }}">
+    Back to User Login
+</a>
+
+</div>
+
+<div class="text-center mt-2">
+
+<a href="{{ url_for('index') }}">
+    Back to Home
+</a>
+
+</div>
+
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+
+</body>
+</html>
+""")
 
 
 # =========================================================
@@ -396,16 +472,11 @@ def logout():
 
     session.clear()
 
-    flash(
-        "You have been logged out.",
-        "info"
-    )
-
     return redirect(url_for("index"))
 
 
 # =========================================================
-# USER DASHBOARD
+# DASHBOARD
 # =========================================================
 
 @app.route("/dashboard")
@@ -421,32 +492,24 @@ def dashboard():
         (session["user_id"],)
     ).fetchone()
 
-    requests_list = db.execute("""
-        SELECT
-            br.*,
-            u.name AS requester_name
-        FROM blood_requests br
-        JOIN users u
-        ON u.id = br.requester_id
-        WHERE br.status='Active'
-        ORDER BY br.id DESC
+    requests = db.execute("""
+        SELECT *
+        FROM blood_requests
+        WHERE status='Active'
+        ORDER BY id DESC
     """).fetchall()
 
     volunteers = db.execute("""
-        SELECT
-            vr.*,
-            u.name AS requester_name
-        FROM volunteer_requests vr
-        JOIN users u
-        ON u.id = vr.requester_id
-        WHERE vr.status='Open'
-        ORDER BY vr.id DESC
+        SELECT *
+        FROM volunteer_requests
+        WHERE status='Open'
+        ORDER BY id DESC
     """).fetchall()
 
     return render_template(
         "dashboard.html",
         user=user,
-        requests=requests_list,
+        requests=requests,
         volunteers=volunteers
     )
 
@@ -462,14 +525,6 @@ def blood_request():
         return redirect(url_for("login"))
 
     if request.method == "POST":
-
-        blood_group = request.form["blood_group"]
-        units = int(request.form["units"])
-        hospital = request.form["hospital"].strip()
-        city = request.form["city"].strip()
-        urgency = request.form["urgency"]
-        contact = request.form["contact"].strip()
-        notes = request.form.get("notes", "").strip()
 
         db = get_db()
 
@@ -490,14 +545,14 @@ def blood_request():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?)
         """, (
             session["user_id"],
-            blood_group,
-            units,
-            hospital,
-            city,
-            urgency,
-            contact,
-            notes,
-            datetime.now().isoformat(timespec="seconds")
+            request.form["blood_group"],
+            int(request.form["units"]),
+            request.form["hospital"].strip(),
+            request.form["city"].strip(),
+            request.form["urgency"],
+            request.form["contact"].strip(),
+            request.form.get("notes", "").strip(),
+            now()
         ))
 
         db.commit()
@@ -524,12 +579,6 @@ def volunteer_request():
 
     if request.method == "POST":
 
-        assistance = request.form["assistance"].strip()
-        urgency = request.form["urgency"]
-        location = request.form["location"].strip()
-        contact = request.form["contact"].strip()
-        notes = request.form.get("notes", "").strip()
-
         db = get_db()
 
         db.execute("""
@@ -547,12 +596,12 @@ def volunteer_request():
             VALUES (?, ?, ?, ?, ?, ?, 'Open', ?)
         """, (
             session["user_id"],
-            assistance,
-            location,
-            urgency,
-            contact,
-            notes,
-            datetime.now().isoformat(timespec="seconds")
+            request.form["assistance"].strip(),
+            request.form["location"].strip(),
+            request.form["urgency"],
+            request.form["contact"].strip(),
+            request.form.get("notes", "").strip(),
+            now()
         ))
 
         db.commit()
@@ -577,12 +626,12 @@ def donors():
     if "user_id" not in session:
         return redirect(url_for("login"))
 
-    selected_bg = request.args.get(
+    blood_group = request.args.get(
         "blood_group",
         ""
     ).strip()
 
-    selected_city = request.args.get(
+    city = request.args.get(
         "city",
         ""
     ).strip()
@@ -594,28 +643,28 @@ def donors():
         AND available=1
     """
 
-    params = []
+    values = []
 
-    if selected_bg:
+    if blood_group:
         query += " AND blood_group=?"
-        params.append(selected_bg)
+        values.append(blood_group)
 
-    if selected_city:
+    if city:
         query += " AND city LIKE ?"
-        params.append("%" + selected_city + "%")
+        values.append("%" + city + "%")
 
     query += " ORDER BY name"
 
     donor_list = get_db().execute(
         query,
-        params
+        values
     ).fetchall()
 
     return render_template(
         "donors.html",
         donors=donor_list,
-        selected_bg=selected_bg,
-        selected_city=selected_city
+        selected_bg=blood_group,
+        selected_city=city
     )
 
 
@@ -623,62 +672,53 @@ def donors():
 # DONOR RESPONSE
 # =========================================================
 
-@app.route(
-    "/respond/<int:request_id>",
-    methods=["POST"]
-)
+@app.route("/respond/<int:request_id>", methods=["POST"])
 def respond(request_id):
 
     if "user_id" not in session:
         return redirect(url_for("login"))
 
     if session.get("role") != "donor":
+
         flash(
-            "Only donors can respond to blood requests.",
+            "Only donors can respond.",
             "warning"
         )
+
         return redirect(url_for("dashboard"))
 
     db = get_db()
 
-    existing = db.execute("""
-        SELECT id
-        FROM responses
-        WHERE request_id=?
-        AND donor_id=?
-    """, (
-        request_id,
-        session["user_id"]
-    )).fetchone()
+    try:
 
-    if existing:
+        db.execute("""
+            INSERT INTO responses
+            (
+                request_id,
+                donor_id,
+                response,
+                created_at
+            )
+            VALUES (?, ?, 'I Can Help', ?)
+        """, (
+            request_id,
+            session["user_id"],
+            now()
+        ))
+
+        db.commit()
+
+        flash(
+            "Your response was sent.",
+            "success"
+        )
+
+    except sqlite3.IntegrityError:
+
         flash(
             "You already responded to this request.",
             "warning"
         )
-        return redirect(url_for("dashboard"))
-
-    db.execute("""
-        INSERT INTO responses
-        (
-            request_id,
-            donor_id,
-            response,
-            created_at
-        )
-        VALUES (?, ?, 'I Can Help', ?)
-    """, (
-        request_id,
-        session["user_id"],
-        datetime.now().isoformat(timespec="seconds")
-    ))
-
-    db.commit()
-
-    flash(
-        "Thank you! Your response was sent.",
-        "success"
-    )
 
     return redirect(url_for("dashboard"))
 
@@ -695,153 +735,256 @@ def admin():
 
     db = get_db()
 
-    users = db.execute("""
-        SELECT *
-        FROM users
-        ORDER BY id DESC
-    """).fetchall()
+    users = db.execute(
+        "SELECT * FROM users ORDER BY id DESC"
+    ).fetchall()
 
-    reqs = db.execute("""
-        SELECT
-            br.*,
-            u.name AS requester_name
-        FROM blood_requests br
-        JOIN users u
-        ON u.id = br.requester_id
-        ORDER BY br.id DESC
-    """).fetchall()
+    requests = db.execute(
+        "SELECT * FROM blood_requests ORDER BY id DESC"
+    ).fetchall()
 
     responses = db.execute("""
         SELECT
-            r.*,
-            u.name AS donor_name,
-            br.blood_group,
-            br.hospital
-        FROM responses r
-        JOIN users u
-        ON u.id = r.donor_id
-        JOIN blood_requests br
-        ON br.id = r.request_id
-        ORDER BY r.id DESC
+            responses.*,
+            users.name AS donor_name,
+            blood_requests.blood_group,
+            blood_requests.hospital
+        FROM responses
+        JOIN users
+        ON users.id = responses.donor_id
+        JOIN blood_requests
+        ON blood_requests.id = responses.request_id
+        ORDER BY responses.id DESC
     """).fetchall()
 
-    return render_template(
-        "admin.html",
+    return render_template_string("""
+<!doctype html>
+<html>
+<head>
+
+<title>LifeLink Admin</title>
+
+<meta name="viewport"
+      content="width=device-width, initial-scale=1">
+
+<link
+href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="container py-4">
+
+<div class="d-flex justify-content-between">
+
+<h2>🔐 LifeLink Admin Dashboard</h2>
+
+<a
+class="btn btn-outline-danger"
+href="{{ url_for('logout') }}">
+
+Logout
+
+</a>
+
+</div>
+
+<hr>
+
+<h4>Registered Users</h4>
+
+<div class="table-responsive">
+
+<table class="table table-bordered">
+
+<tr>
+<th>Name</th>
+<th>Email</th>
+<th>Role</th>
+<th>Blood</th>
+<th>City</th>
+<th>Action</th>
+</tr>
+
+{% for u in users %}
+
+<tr>
+
+<td>{{ u.name }}</td>
+<td>{{ u.email }}</td>
+<td>{{ u.role }}</td>
+<td>{{ u.blood_group or '-' }}</td>
+<td>{{ u.city }}</td>
+
+<td>
+
+{% if u.email != admin_email %}
+
+<form
+method="post"
+action="{{ url_for('admin_delete_user', user_id=u.id) }}">
+
+<button class="btn btn-sm btn-danger">
+Delete
+</button>
+
+</form>
+
+{% else %}
+
+<b>Main Admin</b>
+
+{% endif %}
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+</div>
+
+<h4 class="mt-4">Blood Requests</h4>
+
+{% for r in requests %}
+
+<div class="card mb-2">
+
+<div class="card-body">
+
+<b>
+{{ r.blood_group }}
+-
+{{ r.units }} unit(s)
+</b>
+
+<br>
+
+{{ r.hospital }},
+{{ r.city }}
+
+<br>
+
+Urgency:
+{{ r.urgency }}
+
+<br>
+
+Status:
+<b>{{ r.status }}</b>
+
+<br><br>
+
+<form
+method="post"
+action="{{ url_for(
+'admin_status',
+request_id=r.id,
+status='Fulfilled'
+) }}"
+style="display:inline">
+
+<button class="btn btn-sm btn-success">
+Mark Fulfilled
+</button>
+
+</form>
+
+<form
+method="post"
+action="{{ url_for(
+'admin_delete_request',
+request_id=r.id
+) }}"
+style="display:inline">
+
+<button class="btn btn-sm btn-danger">
+Delete
+</button>
+
+</form>
+
+</div>
+</div>
+
+{% else %}
+
+<p>No blood requests.</p>
+
+{% endfor %}
+
+
+<h4 class="mt-4">
+Donor Responses
+</h4>
+
+{% for r in responses %}
+
+<div class="border rounded p-3 mb-2">
+
+<b>{{ r.donor_name }}</b>
+
+responded for
+
+<b>{{ r.blood_group }}</b>
+
+at {{ r.hospital }}
+
+<br>
+
+<form
+method="post"
+action="{{ url_for(
+'admin_delete_response',
+response_id=r.id
+) }}">
+
+<button class="btn btn-sm btn-danger mt-2">
+Delete
+</button>
+
+</form>
+
+</div>
+
+{% else %}
+
+<p>No responses.</p>
+
+{% endfor %}
+
+</div>
+
+</body>
+</html>
+""",
         users=users,
-        reqs=reqs,
-        responses=responses
+        requests=requests,
+        responses=responses,
+        admin_email=ADMIN_EMAIL
     )
 
 
 # =========================================================
-# ADMIN - UPDATE REQUEST
+# ADMIN ACTIONS
 # =========================================================
 
 @app.route(
     "/admin/request/<int:request_id>/<status>",
     methods=["POST"]
 )
-def update_request(request_id, status):
+def admin_status(request_id, status):
 
     if session.get("role") != "admin":
         return redirect(url_for("admin_login"))
 
-    allowed = [
+    if status not in [
         "Active",
         "Fulfilled",
         "Cancelled"
-    ]
-
-    if status not in allowed:
-        flash(
-            "Invalid request status.",
-            "danger"
-        )
-        return redirect(url_for("admin"))
-
-    db = get_db()
-
-    db.execute("""
-        UPDATE blood_requests
-        SET status=?
-        WHERE id=?
-    """, (
-        status,
-        request_id
-    ))
-
-    db.commit()
-
-    flash(
-        "Blood request status updated.",
-        "success"
-    )
-
-    return redirect(url_for("admin"))
-
-
-# =========================================================
-# ADMIN - CHANGE USER ROLE
-# =========================================================
-
-@app.route(
-    "/admin/user/<int:user_id>/role",
-    methods=["POST"]
-)
-def admin_user_role(user_id):
-
-    if session.get("role") != "admin":
-        return redirect(url_for("admin_login"))
-
-    role = request.form.get("role")
-
-    if role not in ROLES:
-        flash(
-            "Invalid role.",
-            "danger"
-        )
-        return redirect(url_for("admin"))
-
-    db = get_db()
-
-    user = db.execute(
-        "SELECT * FROM users WHERE id=?",
-        (user_id,)
-    ).fetchone()
-
-    if user is None:
-        flash(
-            "User not found.",
-            "danger"
-        )
-        return redirect(url_for("admin"))
-
-    if user["email"] == ADMIN_EMAIL:
-        flash(
-            "The main administrator cannot be changed.",
-            "danger"
-        )
-        return redirect(url_for("admin"))
-
-    db.execute("""
-        UPDATE users
-        SET role=?
-        WHERE id=?
-    """, (
-        role,
-        user_id
-    ))
-
-    db.commit()
-
-    flash(
-        "User role updated.",
-        "success"
-    )
-
-    return redirect(url_for("admin"))
-
-
-# =========================================================
-# ADMIN - AVAILABILITY
-# =================================
+    ]:
+        return redirect(url_for("admin
