@@ -1103,7 +1103,7 @@ def admin_delete_user(user_id):
 # ============================================================
 
 @app.route("/admin/blood-request/<int:request_id>/delete", methods=["POST"])
-def admin_delete_blood_request(request_id):
+def admin_delete_request(request_id):
     if session.get("role") != "admin":
         return redirect(url_for("admin_login"))
 
